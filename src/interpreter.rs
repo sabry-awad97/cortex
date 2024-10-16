@@ -2,10 +2,38 @@ use crate::error::{CortexError, Result};
 use std::fs;
 use std::path::Path;
 
+#[derive(Debug, PartialEq)]
+enum Instruction {
+    IncrementPointer,
+    DecrementPointer,
+    IncrementValue,
+    DecrementValue,
+    Output,
+    Input,
+    LoopStart,
+    LoopEnd,
+}
+
+impl From<char> for Instruction {
+    fn from(ch: char) -> Self {
+        match ch {
+            '>' => Self::IncrementPointer,
+            '<' => Self::DecrementPointer,
+            '+' => Self::IncrementValue,
+            '-' => Self::DecrementValue,
+            '.' => Self::Output,
+            ',' => Self::Input,
+            '[' => Self::LoopStart,
+            ']' => Self::LoopEnd,
+            _ => panic!("Invalid character"),
+        }
+    }
+}
+
 pub struct Interpreter {
     memory: Vec<u8>,
     pointer: usize,
-    code: Vec<char>,
+    code: Vec<Instruction>,
     code_pointer: usize,
 }
 
@@ -26,7 +54,7 @@ impl Interpreter {
     }
 
     pub fn load_code(&mut self, code: &str) {
-        self.code = code.chars().collect();
+        self.code = code.chars().map(|c| c.into()).collect();
         self.code_pointer = 0;
     }
 
@@ -41,33 +69,36 @@ impl Interpreter {
 
     fn execute_instruction(&mut self) -> Result<()> {
         match self.code[self.code_pointer] {
-            '>' => {
+            Instruction::IncrementPointer => {
                 self.pointer += 1;
                 if self.pointer >= self.memory.len() {
                     return Err(CortexError::Runtime("Memory pointer out of bounds".into()));
                 }
             }
-            '<' => {
+            Instruction::DecrementPointer => {
                 self.pointer = self.pointer.checked_sub(1).ok_or_else(|| {
                     CortexError::Runtime("Memory pointer cannot go below zero".into())
                 })?;
             }
-            '+' => self.memory[self.pointer] = self.memory[self.pointer].wrapping_add(1),
-            '-' => self.memory[self.pointer] = self.memory[self.pointer].wrapping_sub(1),
-            '.' => {
+            Instruction::IncrementValue => {
+                self.memory[self.pointer] = self.memory[self.pointer].wrapping_add(1)
+            }
+            Instruction::DecrementValue => {
+                self.memory[self.pointer] = self.memory[self.pointer].wrapping_sub(1)
+            }
+            Instruction::Output => {
                 use std::io::Write;
                 print!("{}", self.memory[self.pointer] as char);
                 std::io::stdout().flush()?;
             }
-            ',' => {
+            Instruction::Input => {
                 use std::io::Read;
                 let mut input = [0];
                 std::io::stdin().read_exact(&mut input)?;
                 self.memory[self.pointer] = input[0];
             }
-            '[' => self.handle_loop_start()?,
-            ']' => self.handle_loop_end()?,
-            _ => {} // Ignore all other characters
+            Instruction::LoopStart => self.handle_loop_start()?,
+            Instruction::LoopEnd => self.handle_loop_end()?,
         }
         self.code_pointer += 1;
         Ok(())
@@ -82,8 +113,8 @@ impl Interpreter {
                     return Err(CortexError::Syntax("Unmatched '[' bracket".into()));
                 }
                 match self.code[self.code_pointer] {
-                    '[' => depth += 1,
-                    ']' => depth -= 1,
+                    Instruction::LoopStart => depth += 1,
+                    Instruction::LoopEnd => depth -= 1,
                     _ => {}
                 }
             }
@@ -100,8 +131,8 @@ impl Interpreter {
                 }
                 self.code_pointer -= 1;
                 match self.code[self.code_pointer] {
-                    ']' => depth += 1,
-                    '[' => depth -= 1,
+                    Instruction::LoopEnd => depth += 1,
+                    Instruction::LoopStart => depth -= 1,
                     _ => {}
                 }
             }
@@ -112,10 +143,10 @@ impl Interpreter {
     pub fn check_syntax(&self) -> Result<()> {
         let mut bracket_stack = Vec::new();
 
-        for (index, &ch) in self.code.iter().enumerate() {
+        for (index, ref ch) in self.code.iter().enumerate() {
             match ch {
-                '[' => bracket_stack.push(index),
-                ']' => {
+                Instruction::LoopStart => bracket_stack.push(index),
+                Instruction::LoopEnd => {
                     if bracket_stack.pop().is_none() {
                         return Err(CortexError::Syntax(format!(
                             "Unmatched ']' at position {}",
