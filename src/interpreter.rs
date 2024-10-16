@@ -82,14 +82,17 @@ impl Interpreter {
     fn execute_instruction(&mut self) -> Result<()> {
         match self.code[self.code_pointer] {
             Instruction::IncrementPointer => {
-                self.pointer = (self.pointer + 1) % self.memory.len();
+                self.pointer = self.pointer.checked_add(1).ok_or_else(|| {
+                    CortexError::Runtime("Memory pointer out of bounds".into())
+                })?;
+                if self.pointer >= self.memory.len() {
+                    return Err(CortexError::Runtime("Memory pointer out of bounds".into()));
+                }
             }
             Instruction::DecrementPointer => {
-                if self.pointer == 0 {
-                    self.pointer = self.memory.len() - 1;
-                } else {
-                    self.pointer -= 1;
-                }
+                self.pointer = self.pointer.checked_sub(1).ok_or_else(|| {
+                    CortexError::Runtime("Memory pointer cannot go below zero".into())
+                })?;
             }
             Instruction::IncrementValue => {
                 self.memory[self.pointer] = self.memory[self.pointer].wrapping_add(1)
