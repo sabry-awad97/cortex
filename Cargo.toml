@@ -1,0 +1,9 @@
+[package]
+name = "cortex"
+version = "0.1.0"
+edition = "2021"
+description = "A robust esoteric language interpreter written in Rust"
+authors = ["Sabry Awad <dr.sabry1997@gmail.com>"]
+license = "MIT"
+
+[dependencies]
