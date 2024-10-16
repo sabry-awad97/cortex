@@ -113,10 +113,14 @@ impl Interpreter {
     fn handle_loop_start(&mut self) -> Result<()> {
         if self.memory[self.pointer] == 0 {
             let mut depth = 1;
+            let start_position = self.code_pointer;
             while depth > 0 {
                 self.code_pointer += 1;
                 if self.code_pointer >= self.code.len() {
-                    return Err(CortexError::Syntax("Unmatched '[' bracket".into()));
+                    return Err(CortexError::Syntax {
+                        message: "Unmatched '[' bracket".into(),
+                        position: start_position,
+                    });
                 }
                 match self.code[self.code_pointer] {
                     Instruction::LoopStart => depth += 1,
@@ -131,9 +135,13 @@ impl Interpreter {
     fn handle_loop_end(&mut self) -> Result<()> {
         if self.memory[self.pointer] != 0 {
             let mut depth = 1;
+            let end_position = self.code_pointer;
             while depth > 0 {
                 if self.code_pointer == 0 {
-                    return Err(CortexError::Syntax("Unmatched ']' bracket".into()));
+                    return Err(CortexError::Syntax {
+                        message: "Unmatched ']' bracket".into(),
+                        position: end_position,
+                    });
                 }
                 self.code_pointer -= 1;
                 match self.code[self.code_pointer] {
@@ -154,10 +162,10 @@ impl Interpreter {
                 Instruction::LoopStart => bracket_stack.push(index),
                 Instruction::LoopEnd => {
                     if bracket_stack.pop().is_none() {
-                        return Err(CortexError::Syntax(format!(
-                            "Unmatched ']' at position {}",
-                            index
-                        )));
+                        return Err(CortexError::Syntax {
+                            message: "Unmatched ']' bracket".into(),
+                            position: index,
+                        });
                     }
                 }
                 _ => {}
@@ -165,10 +173,10 @@ impl Interpreter {
         }
 
         if let Some(position) = bracket_stack.pop() {
-            return Err(CortexError::Syntax(format!(
-                "Unmatched '[' at position {}",
-                position
-            )));
+            return Err(CortexError::Syntax {
+                message: "Unmatched '[' bracket".into(),
+                position,
+            });
         }
 
         Ok(())
