@@ -1,5 +1,6 @@
 use crate::error::{CortexError, Result};
-use std::fs;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 #[derive(Debug, PartialEq)]
@@ -48,7 +49,12 @@ impl Interpreter {
     }
 
     pub fn load_file<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        let content = fs::read_to_string(path)?;
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
+        let content: String = reader
+            .lines()
+            .collect::<std::io::Result<Vec<String>>>()?
+            .join("\n");
         self.load_code(&content);
         Ok(())
     }
