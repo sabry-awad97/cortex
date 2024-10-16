@@ -31,6 +31,8 @@ impl Interpreter {
     }
 
     pub fn run(&mut self) -> Result<()> {
+        self.check_syntax()?;
+
         while self.code_pointer < self.code.len() {
             self.execute_instruction()?;
         }
@@ -104,6 +106,34 @@ impl Interpreter {
                 }
             }
         }
+        Ok(())
+    }
+
+    pub fn check_syntax(&self) -> Result<()> {
+        let mut bracket_stack = Vec::new();
+
+        for (index, &ch) in self.code.iter().enumerate() {
+            match ch {
+                '[' => bracket_stack.push(index),
+                ']' => {
+                    if bracket_stack.pop().is_none() {
+                        return Err(CortexError::Syntax(format!(
+                            "Unmatched ']' at position {}",
+                            index
+                        )));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if let Some(position) = bracket_stack.pop() {
+            return Err(CortexError::Syntax(format!(
+                "Unmatched '[' at position {}",
+                position
+            )));
+        }
+
         Ok(())
     }
 }
