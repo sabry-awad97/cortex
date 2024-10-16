@@ -1,4 +1,5 @@
 use crate::error::{CortexError, Result};
+use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -15,18 +16,20 @@ enum Instruction {
     LoopEnd,
 }
 
-impl From<char> for Instruction {
-    fn from(ch: char) -> Self {
+impl TryFrom<char> for Instruction {
+    type Error = ();
+
+    fn try_from(ch: char) -> std::result::Result<Instruction, ()> {
         match ch {
-            '>' => Self::IncrementPointer,
-            '<' => Self::DecrementPointer,
-            '+' => Self::IncrementValue,
-            '-' => Self::DecrementValue,
-            '.' => Self::Output,
-            ',' => Self::Input,
-            '[' => Self::LoopStart,
-            ']' => Self::LoopEnd,
-            _ => Self::IncrementPointer, // Default to a no-op instruction
+            '>' => Ok(Self::IncrementPointer),
+            '<' => Ok(Self::DecrementPointer),
+            '+' => Ok(Self::IncrementValue),
+            '-' => Ok(Self::DecrementValue),
+            '.' => Ok(Self::Output),
+            ',' => Ok(Self::Input),
+            '[' => Ok(Self::LoopStart),
+            ']' => Ok(Self::LoopEnd),
+            _ => Err(()),
         }
     }
 }
@@ -36,7 +39,6 @@ pub struct Interpreter {
     pointer: usize,
     code: Vec<Instruction>,
     code_pointer: usize,
-    invalid_chars: Vec<(char, usize)>, // New field to track invalid characters
 }
 
 impl Interpreter {
@@ -46,7 +48,6 @@ impl Interpreter {
             pointer: 0,
             code: Vec::new(),
             code_pointer: 0,
-            invalid_chars: Vec::new(), // Initialize the new field
         }
     }
 
@@ -64,30 +65,13 @@ impl Interpreter {
     pub fn load_code(&mut self, code: &str) {
         self.code = code
             .chars()
-            .enumerate()
-            .filter_map(|(i, c)| {
-                match c {
-                    '>' | '<' | '+' | '-' | '.' | ',' | '[' | ']' => Some(c.into()),
-                    _ => {
-                        self.invalid_chars.push((c, i));
-                        None
-                    }
-                }
-            })
+            .filter_map(|c| Instruction::try_from(c).ok())
             .collect();
         self.code_pointer = 0;
     }
 
     pub fn run(&mut self) -> Result<()> {
         self.check_syntax()?;
-
-        // Print warning about invalid characters
-        if !self.invalid_chars.is_empty() {
-            eprintln!("Warning: Invalid characters found and ignored:");
-            for (char, pos) in &self.invalid_chars {
-                eprintln!("  '{}' at position {}", char, pos);
-            }
-        }
 
         while self.code_pointer < self.code.len() {
             self.execute_instruction()?;
@@ -98,15 +82,14 @@ impl Interpreter {
     fn execute_instruction(&mut self) -> Result<()> {
         match self.code[self.code_pointer] {
             Instruction::IncrementPointer => {
-                self.pointer += 1;
-                if self.pointer >= self.memory.len() {
-                    return Err(CortexError::Runtime("Memory pointer out of bounds".into()));
-                }
+                self.pointer = (self.pointer + 1) % self.memory.len();
             }
             Instruction::DecrementPointer => {
-                self.pointer = self.pointer.checked_sub(1).ok_or_else(|| {
-                    CortexError::Runtime("Memory pointer cannot go below zero".into())
-                })?;
+                if self.pointer == 0 {
+                    self.pointer = self.memory.len() - 1;
+                } else {
+                    self.pointer -= 1;
+                }
             }
             Instruction::IncrementValue => {
                 self.memory[self.pointer] = self.memory[self.pointer].wrapping_add(1)
