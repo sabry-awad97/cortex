@@ -26,7 +26,7 @@ impl From<char> for Instruction {
             ',' => Self::Input,
             '[' => Self::LoopStart,
             ']' => Self::LoopEnd,
-            _ => panic!("Invalid character"),
+            _ => Self::IncrementPointer, // Default to a no-op instruction
         }
     }
 }
@@ -36,6 +36,7 @@ pub struct Interpreter {
     pointer: usize,
     code: Vec<Instruction>,
     code_pointer: usize,
+    invalid_chars: Vec<(char, usize)>, // New field to track invalid characters
 }
 
 impl Interpreter {
@@ -45,6 +46,7 @@ impl Interpreter {
             pointer: 0,
             code: Vec::new(),
             code_pointer: 0,
+            invalid_chars: Vec::new(), // Initialize the new field
         }
     }
 
@@ -60,12 +62,32 @@ impl Interpreter {
     }
 
     pub fn load_code(&mut self, code: &str) {
-        self.code = code.chars().map(|c| c.into()).collect();
+        self.code = code
+            .chars()
+            .enumerate()
+            .filter_map(|(i, c)| {
+                match c {
+                    '>' | '<' | '+' | '-' | '.' | ',' | '[' | ']' => Some(c.into()),
+                    _ => {
+                        self.invalid_chars.push((c, i));
+                        None
+                    }
+                }
+            })
+            .collect();
         self.code_pointer = 0;
     }
 
     pub fn run(&mut self) -> Result<()> {
         self.check_syntax()?;
+
+        // Print warning about invalid characters
+        if !self.invalid_chars.is_empty() {
+            eprintln!("Warning: Invalid characters found and ignored:");
+            for (char, pos) in &self.invalid_chars {
+                eprintln!("  '{}' at position {}", char, pos);
+            }
+        }
 
         while self.code_pointer < self.code.len() {
             self.execute_instruction()?;
